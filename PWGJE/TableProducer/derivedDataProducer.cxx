@@ -306,13 +306,13 @@ struct JetDerivedDataProducerTask {
     auto trackParCov = getTrackParCov(track);
     auto xyzTrack = trackParCov.getXYZGlo();
     float sigmaDCAXYZ2;
-    float dcaXYZ = getDcaXYZ(track, &sigmaDCAXYZ2);
+    float dcaXYZ = getDcaXYZ(track, &sigmaDCAXYZ2); //maybe need to remove this too
     float dcaX = -99.0;
     float dcaY = -99.0;
     if (track.collisionId() >= 0) {
       auto const& collision = track.collision_as<aod::Collisions>();
-      dcaX = xyzTrack.X() - collision.posX();
-      dcaY = xyzTrack.Y() - collision.posY();
+      //dcaX = xyzTrack.X() - collision.posX();
+      //dcaY = xyzTrack.Y() - collision.posY();
     }
 
     products.jTracksExtraTable(dcaX, dcaY, track.dcaZ(), track.dcaXY(), dcaXYZ, std::sqrt(track.sigmaDcaZ2()), std::sqrt(track.sigmaDcaXY2()), std::sqrt(sigmaDCAXYZ2), track.sigma1Pt()); // why is this getSigmaZY
