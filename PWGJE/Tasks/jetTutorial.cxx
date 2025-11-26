@@ -48,6 +48,9 @@ struct JetTutorialTask {
                               {"h_track_pt", "track pT;#it{p}_{T,track} (GeV/#it{c});entries", {HistType::kTH1F, {{200, 0., 200.}}}},
                               {"h_track_eta", "track #eta;#eta_{track};entries", {HistType::kTH1F, {{100, -1.0, 1.0}}}},
                               {"h_track_phi", "track #varphi;#varphi_{track};entries", {HistType::kTH1F, {{80, -1.0, 7.}}}},
+                              {"h_part_track_pt", "particle level track pT;#it{p}_{T,track part} (GeV/#it{c});entries", {HistType::kTH1F, {{200, 0., 200.}}}},
+                              {"h_part_track_eta", "particle level track #eta;#eta_{track part};entries", {HistType::kTH1F, {{100, -1.0, 1.0}}}},
+                              {"h_part_track_phi", "particle level track #phi;#phi_{track part};entries", {HistType::kTH1F, {{80, -1.0, 7.}}}},
                               {"h_track_chi2PerCluster", "track #chi^{2} per cluste ;#chi^{2};entries", {HistType::kTH1F, {{100, 0, 40}}}},
                               {"h_jet_pt", "jet pT;#it{p}_{T,jet} (GeV/#it{c});entries", {HistType::kTH1F, {{200, 0., 200.}}}},
                               {"h_jet_eta", "jet #eta;#eta_{jet};entries", {HistType::kTH1F, {{100, -1.0, 1.0}}}},
@@ -76,6 +79,7 @@ struct JetTutorialTask {
                               {"h_matched_jets_phi", "#phi_{jet part}; #phi_{jet det}", {HistType::kTH2F, {{80, -1.0, 7.}, {80, -1.0, 7.}}}}}};
 
   Configurable<float> vertexZCut{"vertexZCut", 10.0f, "Accepted z-vertex range"};
+  Configurable<float> trackPtMin{"trackPtMin", 0.15f, "Track pT minimum"};
 
   Configurable<float> jetPtMin{"jetPtMin", 5.0, "minimum jet pT cut"};
   Configurable<float> jetR{"jetR", 0.4, "jet resolution parameter"};
@@ -104,6 +108,8 @@ struct JetTutorialTask {
   Filter mcCollisionFilter = nabs(aod::jmccollision::posZ) < vertexZCut;
 
   Preslice<soa::Filtered<aod::ChargedMCParticleLevelJets>> perMcCollisionJets = aod::jet::mcCollisionId;
+  // Preslice<aod::JetParticles> perMcCollisionParticles = aod::jet::mcCollisionId;
+  Preslice<aod::JetParticles> perMcCollisionParticles = aod::jmcparticle::mcCollisionId;
 
   void processCollisions(aod::JetCollision const& collision, aod::JetTracks const& tracks)
   {
@@ -123,6 +129,60 @@ struct JetTutorialTask {
     }
   }
   PROCESS_SWITCH(JetTutorialTask, processCollisions, "process JE collisions", false);
+  
+  // void processCollisions(aod::JetCollision const& collision, aod::JetParticles const& particles)
+  // void processParticleLevelCollisions(soa::Filtered<aod::JetMcCollisions>::iterator const& mcCollision, aod::JetParticles const& particles)
+  void processParticleLevelCollisions(aod::JetMcCollision const& mcCollision, aod::JetParticles const& particles)
+  {
+    
+    // registry.fill(HIST("h_collisions"), 0.5);
+    // if (!jetderiveddatautilities::selectCollision(collision, eventSelectionBits)) {
+    //   return;
+    // }
+    // registry.fill(HIST("h_collisions"), 1.5);
+    for (auto const& particle : particles) {
+      // if (!jetderiveddatautilities::selectTrack(track, trackSelection)) {
+        //   continue;
+        // }
+        registry.fill(HIST("h_part_track_pt"), particle.pt());
+        registry.fill(HIST("h_part_track_eta"), particle.eta());
+        registry.fill(HIST("h_part_track_phi"), particle.phi());
+      }
+    }
+  PROCESS_SWITCH(JetTutorialTask, processParticleLevelCollisions, "process MC particle level JE collisions", false);
+
+  void processMCParticlesCharged(soa::Filtered<aod::JetCollisionsMCD>::iterator const& collision, aod::JetMcCollisions const&, aod::JetParticles const& particles, aod::JetTracks const& tracks)
+  {
+    if (!jetderiveddatautilities::selectCollision(collision, eventSelectionBits)) {
+      return;
+    }
+    for (auto& track : tracks) {
+      if (!jetderiveddatautilities::selectTrack(track, trackSelection)) {
+        continue;
+      }
+      // registry.fill(HIST("h_track_pt"), track.pt(), collision.mcCollision().weight());
+      registry.fill(HIST("h_track_pt"), track.pt());
+      registry.fill(HIST("h_track_eta"), track.eta());
+      registry.fill(HIST("h_track_phi"), track.phi());
+    }
+    auto particlesPerCollision = particles.sliceBy(perMcCollisionParticles, collision.mcCollisionId());
+    for (auto& particle : particlesPerCollision) {
+      // if (particleSelection == "PhysicalPrimary" && !particle.isPhysicalPrimary()) { // CHECK : Does this exclude the HF hadron?
+      if (!particle.isPhysicalPrimary()) {
+        continue;
+      }
+      if (fabs(particle.eta()) > 0.9) {
+        continue;
+      }
+      if (particle.pt() < trackPtMin) {
+        continue;
+      }
+      registry.fill(HIST("h_part_track_pt"), particle.pt());
+      registry.fill(HIST("h_part_track_eta"), particle.eta());
+      registry.fill(HIST("h_part_track_phi"), particle.phi());
+    }
+  }
+  PROCESS_SWITCH(JetTutorialTask, processMCParticlesCharged, "charged particles and tracks in detector and particle level MC", false);
 
   void processCollisionsWithExternalTracks(soa::Filtered<aod::JetCollisions>::iterator const& collision, soa::Join<aod::JetTracks, aod::JTrackPIs> const& tracks, soa::Join<aod::Tracks, aod::TracksExtra, aod::TracksDCA, aod::TrackSelection> const&)
   {
@@ -198,7 +258,7 @@ struct JetTutorialTask {
   {
     if (!jetderiveddatautilities::selectCollision(collision, eventSelectionBits)) {
       return;
-    }
+    } 
     for (auto& mcdjet : mcdjets) {
       registry.fill(HIST("h_jet_pt"), mcdjet.pt(), collision.mcCollision().weight());
       registry.fill(HIST("h_jet_eta"), mcdjet.eta(), collision.mcCollision().weight());
@@ -212,6 +272,25 @@ struct JetTutorialTask {
     }
   }
   PROCESS_SWITCH(JetTutorialTask, processMCCharged, "charged jets in detector and particle level MC", false);
+
+  void processMCChargedUnweighted(soa::Filtered<aod::JetCollisionsMCD>::iterator const& collision, aod::JetMcCollisions const&, soa::Filtered<aod::ChargedMCDetectorLevelJets> const& mcdjets, soa::Filtered<aod::ChargedMCParticleLevelJets> const& mcpjets)
+  {
+    if (!jetderiveddatautilities::selectCollision(collision, eventSelectionBits)) {
+      return;
+    }
+    for (auto& mcdjet : mcdjets) {
+      registry.fill(HIST("h_jet_pt"), mcdjet.pt());
+      registry.fill(HIST("h_jet_eta"), mcdjet.eta());
+      registry.fill(HIST("h_jet_phi"), mcdjet.phi());
+    }
+    auto mcpjetsPerCollision = mcpjets.sliceBy(perMcCollisionJets, collision.mcCollisionId());
+    for (auto& mcpjet : mcpjetsPerCollision) {
+      registry.fill(HIST("h_part_jet_pt"), mcpjet.pt());
+      registry.fill(HIST("h_part_jet_eta"), mcpjet.eta());
+      registry.fill(HIST("h_part_jet_phi"), mcpjet.phi());
+    }
+  }
+  PROCESS_SWITCH(JetTutorialTask, processMCChargedUnweighted, "charged jets in detector and particle level unweighted MC", false);
 
   using JetMCPTable = soa::Filtered<soa::Join<aod::ChargedMCParticleLevelJets, aod::ChargedMCParticleLevelJetConstituents, aod::ChargedMCParticleLevelJetsMatchedToChargedMCDetectorLevelJets>>;
   void processMCMatchedCharged(soa::Filtered<aod::JetCollisionsMCD>::iterator const& collision,
